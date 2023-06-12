@@ -10,7 +10,7 @@ import numpy as np
 class nnUNetTrainerDiceBCE(nnUNetTrainer):
     def _build_loss(self):
         assert not self.label_manager.has_regions, 'regions not supported by this trainer'
-        loss = DC_and_BCE_loss()
+        loss = DC_and_BCE_loss(None, None)
         deep_supervision_scales = self._get_deep_supervision_scales()
 
         # we give each output a weight which decreases exponentially (division by 2) as the resolution decreases
