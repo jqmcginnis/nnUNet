@@ -7,7 +7,7 @@ from nnunetv2.training.loss.compound_losses import DC_and_BCE_loss
 
 import numpy as np
 
-class nnUNetTrainerTverskyLoss(nnUNetTrainer):
+class nnUNetTrainerDiceBCE(nnUNetTrainer):
     def _build_loss(self):
         assert not self.label_manager.has_regions, 'regions not supported by this trainer'
         loss = DC_and_BCE_loss()
