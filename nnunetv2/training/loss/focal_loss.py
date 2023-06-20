@@ -1,34 +1,37 @@
 from typing import Callable
+from torch import Tensor
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from nnunetv2.utilities.ddp_allgather import AllGatherGrad
-from nnunetv2.utilities.tensor_utilities import sum_tensor
 
 class FocalLoss(nn.Module):
-    def __init__(self, apply_nonlin: Callable = None, alpha: float = 0.25, gamma: float = 2., ddp: bool = True):
-        """
-        Focal Loss for Dense Object Detection
-        https://arxiv.org/abs/1708.02002
-        """
+    def __init__(self, alpha=1, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
-
         self.alpha = alpha
         self.gamma = gamma
-        self.apply_nonlin = apply_nonlin
-        self.ddp = ddp
+        self.reduction = reduction
 
-    def forward(self, x, y):
-        if self.apply_nonlin is not None:
-            x = self.apply_nonlin(x)
+    def forward(self, inputs, targets):
+        BCE_loss = nn.functional.cross_entropy(inputs, targets.long(), reduction='none')
+        pt = torch.exp(-BCE_loss)
+        F_loss = self.alpha * (1-pt)**self.gamma * BCE_loss
 
-        bce_loss = F.binary_cross_entropy_with_logits(x, y, reduction='none')
-        pt = torch.exp(-bce_loss)
+        if self.reduction == 'mean':
+            return torch.mean(F_loss)
+        elif self.reduction == 'sum':
+            return torch.sum(F_loss)
+        else:
+            return F_loss
 
-        # compute the loss
-        loss = self.alpha * (1 - pt) ** self.gamma * bce_loss
 
-        if self.ddp:
-            loss = AllGatherGrad.apply(loss).mean()
+class RobustFocalLoss(FocalLoss):
+    """
+    this is just a compatibility layer because my target tensor is float and has an extra dimension
 
-        return loss
+    input must be logits, not probabilities!
+    """
+    def forward(self, input: Tensor, target: Tensor) -> Tensor:
+        if len(target.shape) == len(input.shape):
+            assert target.shape[1] == 1
+            target = target[:, 0]
+        return super().forward(input, target)
