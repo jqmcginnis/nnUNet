@@ -5,6 +5,59 @@ from nnunetv2.utilities.ddp_allgather import AllGatherGrad
 from nnunetv2.utilities.tensor_utilities import sum_tensor
 from torch import nn
 
+# start changes by JM
+
+class TverskyLoss(nn.Module):
+    def __init__(self, alpha=0.5, beta=0.5, apply_nonlin: Callable = None, batch_dice: bool = False, 
+                 do_bg: bool = True, smooth: float = 1., ddp: bool = True, clip_tp: float = None):
+        super(TverskyLoss, self).__init__()
+
+        self.do_bg = do_bg
+        self.batch_dice = batch_dice
+        self.apply_nonlin = apply_nonlin
+        self.smooth = smooth
+        self.alpha = alpha
+        self.beta = beta
+        self.clip_tp = clip_tp
+        self.ddp = ddp
+
+    def forward(self, x, y, loss_mask=None):
+        shp_x = x.shape
+
+        if self.batch_dice:
+            axes = [0] + list(range(2, len(shp_x)))
+        else:
+            axes = list(range(2, len(shp_x)))
+
+        if self.apply_nonlin is not None:
+            x = self.apply_nonlin(x)
+
+        tp, fp, fn, _ = get_tp_fp_fn_tn(x, y, axes, loss_mask, False)
+
+        if self.ddp and self.batch_dice:
+            tp = AllGatherGrad.apply(tp).sum(0)
+            fp = AllGatherGrad.apply(fp).sum(0)
+            fn = AllGatherGrad.apply(fn).sum(0)
+
+        if self.clip_tp is not None:
+            tp = torch.clip(tp, min=self.clip_tp , max=None)
+
+        nominator = tp
+        denominator = tp + self.alpha * fp + self.beta * fn
+
+        tversky_index = (nominator + self.smooth) / (torch.clip(denominator + self.smooth, 1e-8))
+
+        if not self.do_bg:
+            if self.batch_dice:
+                tversky_index = tversky_index[1:]
+            else:
+                tversky_index = tversky_index[:, 1:]
+        tversky_index = tversky_index.mean()
+
+        return 1 - tversky_index
+
+
+# end changes by JM
 
 class SoftDiceLoss(nn.Module):
     def __init__(self, apply_nonlin: Callable = None, batch_dice: bool = False, do_bg: bool = True, smooth: float = 1.,
