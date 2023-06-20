@@ -1,13 +1,12 @@
 from nnunetv2.training.loss.deep_supervision import DeepSupervisionWrapper
 from nnunetv2.training.nnUNetTrainer.nnUNetTrainer import nnUNetTrainer
-from nnunetv2.training.loss.focal_loss import FocalLoss
-
+from nnunetv2.training.loss.focal_loss import RobustFocalLoss
 import numpy as np
 
 class nnUNetTrainerFocalLoss(nnUNetTrainer):
     def _build_loss(self):
         assert not self.label_manager.has_regions, 'regions not supported by this trainer'
-        loss = FocalLoss()
+        loss = RobustFocalLoss()
         deep_supervision_scales = self._get_deep_supervision_scales()
 
         # we give each output a weight which decreases exponentially (division by 2) as the resolution decreases
